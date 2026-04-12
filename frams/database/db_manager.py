@@ -20,6 +20,7 @@ import logging
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from typing import List, Optional
 
 import config
 
@@ -93,7 +94,7 @@ class DatabaseManager:
             )
             return student_id
 
-    def get_student_by_id(self, student_id: int) -> sqlite3.Row | None:
+    def get_student_by_id(self, student_id: int) -> Optional[sqlite3.Row]:
         with self._cursor() as cur:
             cur.execute(
                 "SELECT * FROM students WHERE id = ? AND is_active = 1",
@@ -101,7 +102,7 @@ class DatabaseManager:
             )
             return cur.fetchone()
 
-    def get_student_by_label(self, face_label: int) -> sqlite3.Row | None:
+    def get_student_by_label(self, face_label: int) -> Optional[sqlite3.Row]:
         """Look up a student by their LBPH integer label."""
         with self._cursor() as cur:
             cur.execute(
@@ -110,7 +111,7 @@ class DatabaseManager:
             )
             return cur.fetchone()
 
-    def get_student_by_matric(self, matric_no: str) -> sqlite3.Row | None:
+    def get_student_by_matric(self, matric_no: str) -> Optional[sqlite3.Row]:
         with self._cursor() as cur:
             cur.execute(
                 "SELECT * FROM students WHERE matric_no = ? AND is_active = 1",
@@ -118,7 +119,7 @@ class DatabaseManager:
             )
             return cur.fetchone()
 
-    def list_students(self, active_only: bool = True) -> list[sqlite3.Row]:
+    def list_students(self, active_only: bool = True) -> List[sqlite3.Row]:
         with self._cursor() as cur:
             if active_only:
                 cur.execute(
@@ -140,7 +141,7 @@ class DatabaseManager:
                 logger.info("Deactivated student id=%d", student_id)
             return changed
 
-    def get_all_face_labels(self) -> list[int]:
+    def get_all_face_labels(self) -> List[int]:
         """Returns all active face_labels — used by the LBPH trainer."""
         with self._cursor() as cur:
             cur.execute(
@@ -165,7 +166,7 @@ class DatabaseManager:
             )
             return cur.lastrowid
 
-    def list_courses(self, active_only: bool = True) -> list[sqlite3.Row]:
+    def list_courses(self, active_only: bool = True) -> List[sqlite3.Row]:
         with self._cursor() as cur:
             if active_only:
                 cur.execute(
@@ -175,7 +176,7 @@ class DatabaseManager:
                 cur.execute("SELECT * FROM courses ORDER BY course_code")
             return cur.fetchall()
 
-    def get_course_by_id(self, course_id: int) -> sqlite3.Row | None:
+    def get_course_by_id(self, course_id: int) -> Optional[sqlite3.Row]:
         with self._cursor() as cur:
             cur.execute("SELECT * FROM courses WHERE id = ?", (course_id,))
             return cur.fetchone()
@@ -184,12 +185,12 @@ class DatabaseManager:
     # Session helpers
     # ------------------------------------------------------------------
 
-    def list_sessions(self) -> list[sqlite3.Row]:
+    def list_sessions(self) -> List[sqlite3.Row]:
         with self._cursor() as cur:
             cur.execute("SELECT * FROM sessions ORDER BY id")
             return cur.fetchall()
 
-    def get_session_by_name(self, name: str) -> sqlite3.Row | None:
+    def get_session_by_name(self, name: str) -> Optional[sqlite3.Row]:
         with self._cursor() as cur:
             cur.execute("SELECT * FROM sessions WHERE name = ?", (name,))
             return cur.fetchone()
@@ -220,8 +221,8 @@ class DatabaseManager:
             return cur.fetchone() is not None
 
     def log_attendance(self, student_id: int, confidence: float,
-                       course_id: int | None = None,
-                       session_id: int | None = None) -> int | None:
+                       course_id: Optional[int] = None,
+                       session_id: Optional[int] = None) -> Optional[int]:
         """
         Write one attendance record.  Checks for duplicates first.
         Returns the new log id, or None if it was a duplicate.
@@ -251,7 +252,7 @@ class DatabaseManager:
     # Attendance Queries (used by Flask dashboard)
     # ------------------------------------------------------------------
 
-    def get_today_attendance(self) -> list[sqlite3.Row]:
+    def get_today_attendance(self) -> List[sqlite3.Row]:
         today = datetime.now().strftime("%Y-%m-%d")
         with self._cursor() as cur:
             cur.execute(
@@ -278,17 +279,17 @@ class DatabaseManager:
 
     def get_attendance_filtered(
         self,
-        date_from: str | None = None,
-        date_to: str | None = None,
-        course_id: int | None = None,
-        session_id: int | None = None,
-    ) -> list[sqlite3.Row]:
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        course_id: Optional[int] = None,
+        session_id: Optional[int] = None,
+    ) -> List[sqlite3.Row]:
         """
         Flexible filter used by the reports page.
         date_from / date_to should be 'YYYY-MM-DD' strings.
         """
         clauses = []
-        params: list = []
+        params: List = []
 
         if date_from:
             clauses.append("DATE(al.timestamp) >= ?")
@@ -328,11 +329,11 @@ class DatabaseManager:
             )
             return cur.fetchall()
 
-    def get_attendance_summary(self, date_from: str | None = None,
-                               date_to: str | None = None) -> list[sqlite3.Row]:
+    def get_attendance_summary(self, date_from: Optional[str] = None,
+                               date_to: Optional[str] = None) -> List[sqlite3.Row]:
         """Per-student attendance count — useful for the dashboard summary card."""
         clauses = []
-        params: list = []
+        params: List = []
         if date_from:
             clauses.append("DATE(al.timestamp) >= ?")
             params.append(date_from)
@@ -362,7 +363,7 @@ class DatabaseManager:
     # Sync support (used by T22)
     # ------------------------------------------------------------------
 
-    def get_unsynced_logs(self) -> list[sqlite3.Row]:
+    def get_unsynced_logs(self) -> List[sqlite3.Row]:
         with self._cursor() as cur:
             cur.execute(
                 """
@@ -375,7 +376,7 @@ class DatabaseManager:
             )
             return cur.fetchall()
 
-    def mark_logs_synced(self, log_ids: list[int]) -> None:
+    def mark_logs_synced(self, log_ids: List[int]) -> None:
         if not log_ids:
             return
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -395,7 +396,7 @@ class DatabaseManager:
     # System Settings
     # ------------------------------------------------------------------
 
-    def get_setting(self, key: str, default: str | None = None) -> str | None:
+    def get_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
         with self._cursor() as cur:
             cur.execute(
                 "SELECT value FROM system_settings WHERE key = ?", (key,)
