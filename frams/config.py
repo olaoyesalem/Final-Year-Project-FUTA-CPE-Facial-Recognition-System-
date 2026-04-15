@@ -40,6 +40,12 @@ HAAR_SCALE_FACTOR   = 1.3   # How much the image is scaled down at each step
 HAAR_MIN_NEIGHBORS  = 5     # Minimum neighbours for a positive detection
 HAAR_MIN_SIZE       = (60, 60)  # Smallest face rectangle to detect (px)
 
+# Path to the eye cascade used by the liveness detector (T15)
+EYE_CASCADE_PATH    = os.path.join(BASE_DIR, "cascades", "haarcascade_eye.xml")
+
+# Normalised face ROI size fed to LBPH (must be consistent across capture & recognition)
+FACE_ROI_SIZE       = (100, 100)
+
 # ---------------------------------------------------------------------------
 # Face Recognition (LBPH)
 # ---------------------------------------------------------------------------
