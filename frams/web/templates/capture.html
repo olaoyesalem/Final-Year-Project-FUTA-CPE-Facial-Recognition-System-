@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Capture — {{ student['name'] }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3 gap-2">
+  <a href="{{ url_for('enrollment.index') }}" class="btn btn-sm btn-outline-secondary">&larr; Back</a>
+  <h4 class="mb-0">Face Capture — {{ student['name'] }}</h4>
+  <code class="ms-1">{{ student['matric_no'] }}</code>
+</div>
+
+<div class="row g-3 justify-content-center">
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body text-center">
+
+        <!-- Live preview -->
+        <div class="preview-container mb-3">
+          <img id="stream"
+               src="{{ url_for('stream.video_feed') }}"
+               alt="Camera preview"
+               class="img-fluid rounded border preview-img">
+        </div>
+
+        <!-- Progress -->
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small text-muted mb-1">
+            <span>Images captured</span>
+            <span id="progressLabel">{{ existing }}/{{ target }}</span>
+          </div>
+          <div class="progress" style="height: 20px;">
+            <div id="progressBar"
+                 class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                 style="width: {{ [(existing / target * 100)|int, 100]|min }}%">
+            </div>
+          </div>
+        </div>
+
+        <!-- Status message -->
+        <p id="statusMsg" class="text-muted mb-3">
+          {% if existing >= target %}
+            Dataset complete. You can re-capture or go back to train.
+          {% else %}
+            Click <strong>Start Capture</strong> to begin collecting face images.
+          {% endif %}
+        </p>
+
+        <!-- Controls -->
+        <div id="controls" class="d-flex gap-2 justify-content-center flex-wrap">
+          <button id="startBtn" class="btn btn-success" onclick="startCapture()">
+            Start Capture
+          </button>
+          <button id="stopBtn" class="btn btn-danger d-none" onclick="stopCapture()">
+            Cancel
+          </button>
+          <a href="{{ url_for('enrollment.index') }}" class="btn btn-outline-secondary">
+            Back to Enrollment
+          </a>
+        </div>
+
+        <!-- Train button (shown after capture completes) -->
+        <div id="trainSection" class="mt-3 d-none">
+          <hr>
+          <p class="text-success fw-semibold">Capture complete! Train the model to recognise this student.</p>
+          <button class="btn btn-warning" onclick="trainModel()">Train Model Now</button>
+          <div id="trainStatus" class="mt-2 text-muted small"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const studentId = {{ student['id'] }};
+const target    = {{ target }};
+let poller      = null;
+let trainPoller = null;
+
+function startCapture() {
+  document.getElementById('startBtn').classList.add('d-none');
+  document.getElementById('stopBtn').classList.remove('d-none');
+  document.getElementById('statusMsg').textContent = 'Capturing — look at the camera…';
+
+  fetch(`/enrollment/capture/${studentId}/start`, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) {
+        document.getElementById('statusMsg').textContent = 'Error: ' + data.error;
+        resetControls();
+        return;
+      }
+      poller = setInterval(pollCapture, 500);
+    });
+}
+
+function stopCapture() {
+  fetch('/enrollment/capture/stop', { method: 'POST' });
+  clearInterval(poller);
+  document.getElementById('statusMsg').textContent = 'Capture cancelled.';
+  resetControls();
+}
+
+function pollCapture() {
+  fetch('/enrollment/capture/status')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) return;
+
+      const pct = data.total > 0 ? Math.min(100, Math.round(data.saved / data.total * 100)) : 0;
+      document.getElementById('progressBar').style.width = pct + '%';
+      document.getElementById('progressLabel').textContent = data.saved + '/' + data.total;
+
+      if (data.done) {
+        clearInterval(poller);
+        if (data.error) {
+          document.getElementById('statusMsg').textContent = 'Error: ' + data.error;
+        } else {
+          document.getElementById('statusMsg').textContent = `Captured ${data.saved} images successfully.`;
+          document.getElementById('trainSection').classList.remove('d-none');
+        }
+        resetControls();
+      } else {
+        document.getElementById('statusMsg').textContent =
+          `Captured ${data.saved} of ${data.total} images…`;
+      }
+    });
+}
+
+function resetControls() {
+  document.getElementById('startBtn').classList.remove('d-none');
+  document.getElementById('stopBtn').classList.add('d-none');
+}
+
+function trainModel() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Training…';
+  document.getElementById('trainStatus').textContent = 'Training in progress, please wait…';
+
+  fetch('{{ url_for("enrollment.train") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) {
+        document.getElementById('trainStatus').textContent = 'Error: ' + data.error;
+        btn.disabled = false;
+        btn.textContent = 'Train Model Now';
+        return;
+      }
+      trainPoller = setInterval(pollTraining, 1500);
+    });
+}
+
+function pollTraining() {
+  fetch('{{ url_for("enrollment.train_status") }}')
+    .then(r => r.json())
+    .then(data => {
+      if (data.done) {
+        clearInterval(trainPoller);
+        if (data.error) {
+          document.getElementById('trainStatus').textContent = 'Training failed: ' + data.error;
+        } else {
+          const r = data.result;
+          document.getElementById('trainStatus').textContent =
+            `Model trained — ${r.num_students} student(s), ${r.num_images} images. Ready for attendance.`;
+          document.getElementById('trainStatus').className = 'mt-2 text-success fw-semibold';
+        }
+      }
+    });
+}
+</script>
+{% endblock %}

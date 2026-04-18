@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Enrollment{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Student Enrollment</h4>
+  <button class="btn btn-warning" id="trainBtn" onclick="trainModel()">
+    Re-train Model
+  </button>
+</div>
+
+<div class="row g-3">
+  <!-- Add student form -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">Register New Student</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('enrollment.add') }}">
+          <div class="mb-3">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-control" name="name" required
+                   placeholder="e.g. Adefemi Olatoye">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Matric Number</label>
+            <input type="text" class="form-control" name="matric_no" required
+                   placeholder="e.g. CPE/2019/001">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Department</label>
+            <input type="text" class="form-control" name="department"
+                   value="Computer Engineering">
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Register Student</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Students table -->
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">
+        Enrolled Students
+        <span class="badge bg-secondary ms-2">{{ students|length }}</span>
+      </div>
+      <div class="card-body p-0">
+        {% if students %}
+        <div class="table-responsive">
+          <table class="table table-hover table-sm mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Name</th>
+                <th>Matric No</th>
+                <th>Images</th>
+                <th>Enrolled</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in students %}
+              <tr>
+                <td>{{ s['name'] }}</td>
+                <td><code>{{ s['matric_no'] }}</code></td>
+                <td>
+                  {% set cnt = counts[s['id']] %}
+                  <span class="badge bg-{{ 'success' if cnt >= target else 'warning text-dark' }}">
+                    {{ cnt }}/{{ target }}
+                  </span>
+                </td>
+                <td class="text-muted small">{{ s['enrolled_at'][:10] }}</td>
+                <td>
+                  <a href="{{ url_for('enrollment.capture_page', student_id=s['id']) }}"
+                     class="btn btn-sm btn-outline-primary me-1">Capture</a>
+                  <form method="POST"
+                        action="{{ url_for('enrollment.delete', student_id=s['id']) }}"
+                        class="d-inline"
+                        onsubmit="return confirm('Deactivate {{ s['name'] }}?')">
+                    <button class="btn btn-sm btn-outline-danger">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">No students registered yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Training status toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="trainToast" class="toast" role="alert">
+    <div class="toast-header">
+      <strong class="me-auto">Model Training</strong>
+      <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+    </div>
+    <div class="toast-body" id="trainToastMsg">Training in progress…</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let trainPoller = null;
+
+function trainModel() {
+  const btn = document.getElementById('trainBtn');
+  btn.disabled = true;
+  btn.textContent = 'Training…';
+
+  fetch('{{ url_for("enrollment.train") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) {
+        alert('Error: ' + data.error);
+        btn.disabled = false;
+        btn.textContent = 'Re-train Model';
+        return;
+      }
+      showToast('Training in progress…');
+      trainPoller = setInterval(pollTraining, 1500);
+    });
+}
+
+function pollTraining() {
+  fetch('{{ url_for("enrollment.train_status") }}')
+    .then(r => r.json())
+    .then(data => {
+      if (data.done) {
+        clearInterval(trainPoller);
+        const btn = document.getElementById('trainBtn');
+        btn.disabled = false;
+        btn.textContent = 'Re-train Model';
+        if (data.error) {
+          showToast('Training failed: ' + data.error);
+        } else {
+          const r = data.result;
+          showToast(`Training complete — ${r.num_students} student(s), ${r.num_images} images.`);
+        }
+      }
+    });
+}
+
+function showToast(msg) {
+  document.getElementById('trainToastMsg').textContent = msg;
+  const toast = new bootstrap.Toast(document.getElementById('trainToast'), { delay: 5000 });
+  toast.show();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Dashboard</h4>
+  <span class="badge bg-{{ 'success' if mode == 'attendance' else 'warning text-dark' }} fs-6">
+    System: {{ mode | capitalize }}
+  </span>
+</div>
+
+<!-- Stats cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body">
+        <div class="stat-number text-primary">{{ total_students }}</div>
+        <div class="text-muted small">Enrolled Students</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body">
+        <div class="stat-number text-success">{{ today_count }}</div>
+        <div class="text-muted small">Today's Attendance</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body">
+        <div class="stat-number text-info">{{ total_courses }}</div>
+        <div class="text-muted small">Active Courses</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body">
+        <div class="stat-number text-secondary">
+          {% if today_logs %}
+            {{ today_logs[0]['timestamp']|truncate(10, True, '') }}
+          {% else %}
+            —
+          {% endif %}
+        </div>
+        <div class="text-muted small">Last Recorded</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Today's attendance table -->
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">Today's Attendance</span>
+    <a href="{{ url_for('attendance.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
+  </div>
+  <div class="card-body p-0">
+    {% if today_logs %}
+    <div class="table-responsive">
+      <table class="table table-hover table-sm mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Matric No</th>
+            <th>Course</th>
+            <th>Session</th>
+            <th>Time</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in today_logs %}
+          <tr>
+            <td class="text-muted">{{ loop.index }}</td>
+            <td>{{ row['student_name'] }}</td>
+            <td><code>{{ row['matric_no'] }}</code></td>
+            <td>{{ row['course_code'] or '—' }}</td>
+            <td>{{ row['session'] or '—' }}</td>
+            <td>{{ row['timestamp'][11:19] }}</td>
+            <td>
+              <span class="badge bg-{{ 'success' if row['confidence'] < 50 else 'warning text-dark' }}">
+                {{ '%.1f'|format(row['confidence']) }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-4">No attendance recorded today.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
