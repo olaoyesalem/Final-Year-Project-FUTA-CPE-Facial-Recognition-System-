@@ -15,12 +15,13 @@ Start order
 """
 
 import logging
+import os
 import sys
 import threading
 import time
 
 import config
-from database.db_init import init_database
+from database.db_init import initialise_database
 from database.db_manager import DatabaseManager
 from hardware.camera import Camera, CameraError
 from hardware.gpio_handler import GPIOHandler
@@ -126,11 +127,11 @@ def _run_attendance_scan(
     gpio: GPIOHandler,
 ) -> None:
     logger = logging.getLogger("scan")
-    lcd.display(*config.LCD_MSG_SCANNING)
+    lcd.show(*config.LCD_MSG_SCANNING)
 
     frame = app_state.frame_buffer.get_raw()
     if frame is None:
-        lcd.display(*config.LCD_MSG_NO_FACE)
+        lcd.show(*config.LCD_MSG_NO_FACE)
         gpio.beep_failure()
         time.sleep(1)
         return
@@ -138,23 +139,23 @@ def _run_attendance_scan(
     # Face detection
     rect = detector.detect_largest(frame)
     if rect is None:
-        lcd.display(*config.LCD_MSG_NO_FACE)
+        lcd.show(*config.LCD_MSG_NO_FACE)
         gpio.beep_failure()
         time.sleep(1)
         return
 
     # Liveness check (collects window of frames)
     if config.LIVENESS_ENABLED:
-        lcd.display("Liveness Check", "Blink please…")
+        lcd.show("Liveness Check", "Blink please…")
         if not _check_liveness(app_state, detector, liveness):
-            lcd.display("Liveness Failed", "Try Again")
+            lcd.show("Liveness Failed", "Try Again")
             gpio.beep_failure()
             time.sleep(2)
             return
 
     # Recognition
     if not recognizer.is_loaded:
-        lcd.display("No Model", "Enroll First")
+        lcd.show("No Model", "Enroll First")
         time.sleep(2)
         return
 
@@ -162,14 +163,14 @@ def _run_attendance_scan(
     frame = app_state.frame_buffer.get_raw() or frame
     rect  = detector.detect_largest(frame)
     if rect is None:
-        lcd.display(*config.LCD_MSG_NO_FACE)
+        lcd.show(*config.LCD_MSG_NO_FACE)
         time.sleep(1)
         return
 
     try:
         roi = detector.crop_face(frame, rect)
     except ValueError:
-        lcd.display(*config.LCD_MSG_NO_FACE)
+        lcd.show(*config.LCD_MSG_NO_FACE)
         time.sleep(1)
         return
 
@@ -179,7 +180,7 @@ def _run_attendance_scan(
     if not result.is_recognized:
         logger.info("Unknown face (confidence=%.2f, threshold=%.2f).",
                     result.confidence, result.threshold)
-        lcd.display(*config.LCD_MSG_UNKNOWN)
+        lcd.show(*config.LCD_MSG_UNKNOWN)
         gpio.beep_failure()
         time.sleep(2)
         return
@@ -187,19 +188,19 @@ def _run_attendance_scan(
     student = db.get_student_by_label(result.face_label)
     if student is None:
         logger.warning("face_label=%d not in DB.", result.face_label)
-        lcd.display(*config.LCD_MSG_UNKNOWN)
+        lcd.show(*config.LCD_MSG_UNKNOWN)
         gpio.beep_failure()
         time.sleep(2)
         return
 
     log_id = db.log_attendance(student["id"], result.confidence)
     if log_id is None:
-        lcd.display(*config.LCD_MSG_DUPLICATE)
+        lcd.show(*config.LCD_MSG_DUPLICATE)
         gpio.beep_failure()
         logger.info("Duplicate attendance blocked for %s.", student["name"])
     else:
         first_name = student["name"].split()[0]
-        lcd.display(
+        lcd.show(
             config.LCD_MSG_RECOGNIZED[0],
             config.LCD_MSG_RECOGNIZED[1].format(name=first_name),
         )
@@ -222,7 +223,7 @@ def main() -> None:
     logger.info("=== FRAMS starting ===")
 
     # --- Database ---
-    init_database()
+    initialise_database()
     db = DatabaseManager()
 
     # --- Shared state ---
@@ -233,7 +234,6 @@ def main() -> None:
     camera.start()
 
     rtc = RTC()
-    rtc.start()
     if config.RTC_SYNC_SYSTEM:
         try:
             rtc.sync_system_clock()
@@ -242,7 +242,7 @@ def main() -> None:
 
     lcd = LCD()
     lcd.start()
-    lcd.display(*config.LCD_MSG_READY)
+    lcd.show(*config.LCD_MSG_READY)
 
     gpio = GPIOHandler()
     gpio.start()
@@ -268,13 +268,14 @@ def main() -> None:
 
     # --- Flask web server ---
     flask_app = create_app(app_state)
+    flask_port = int(os.environ.get("FRAMS_PORT", config.FLASK_PORT))
     threading.Thread(
         target=_flask_server,
-        args=(flask_app, config.FLASK_HOST, config.FLASK_PORT),
+        args=(flask_app, config.FLASK_HOST, flask_port),
         daemon=True,
         name="flask",
     ).start()
-    logger.info("Flask dashboard at http://%s:%d", config.FLASK_HOST, config.FLASK_PORT)
+    logger.info("Flask dashboard at http://%s:%d", config.FLASK_HOST, flask_port)
 
     # --- Sync manager ---
     sync = SyncManager(db)
@@ -293,7 +294,7 @@ def main() -> None:
                 time.sleep(0.1)
                 continue
 
-            lcd.display(*config.LCD_MSG_READY)
+            lcd.show(*config.LCD_MSG_READY)
             pressed = gpio.wait_for_press(timeout=1.0)
             if not pressed:
                 continue
