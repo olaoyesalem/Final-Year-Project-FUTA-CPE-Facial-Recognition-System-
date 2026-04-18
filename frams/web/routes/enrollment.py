@@ -189,6 +189,10 @@ def capture_start(student_id):
     if app_state.get_mode() == 'enrollment':
         return jsonify(ok=False, error='A capture session is already running'), 409
 
+    if app_state.frame_buffer.get_raw() is None:
+        return jsonify(ok=False,
+                       error='Camera not ready — please start main.py first.'), 503
+
     db      = DatabaseManager()
     student = db.get_student_by_id(student_id)
     if not student:
