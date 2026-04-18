@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Attendance Log</h4>
+  <a href="{{ url_for('attendance.export',
+               date_from=date_from, date_to=date_to,
+               course_id=course_id or '', session_id=session_id or '') }}"
+     class="btn btn-success btn-sm">
+    Export Excel
+  </a>
+</div>
+
+<!-- Filter form -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body py-2">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">From</label>
+        <input type="date" class="form-control form-control-sm" name="date_from"
+               value="{{ date_from }}">
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">To</label>
+        <input type="date" class="form-control form-control-sm" name="date_to"
+               value="{{ date_to }}">
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">Course</label>
+        <select class="form-select form-select-sm" name="course_id">
+          <option value="">All Courses</option>
+          {% for c in courses %}
+          <option value="{{ c['id'] }}"
+                  {% if course_id == c['id'] %}selected{% endif %}>
+            {{ c['course_code'] }} — {{ c['course_name'] }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-2">
+        <label class="form-label small mb-1">Session</label>
+        <select class="form-select form-select-sm" name="session_id">
+          <option value="">All Sessions</option>
+          {% for s in sessions %}
+          <option value="{{ s['id'] }}"
+                  {% if session_id == s['id'] %}selected{% endif %}>
+            {{ s['name'] }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-1">
+        <button type="submit" class="btn btn-primary btn-sm w-100">Filter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Results -->
+<div class="card shadow-sm">
+  <div class="card-header">
+    <span class="fw-semibold">Results</span>
+    <span class="badge bg-secondary ms-2">{{ logs|length }} record(s)</span>
+  </div>
+  <div class="card-body p-0">
+    {% if logs %}
+    <div class="table-responsive">
+      <table class="table table-hover table-sm mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>#</th>
+            <th>Student Name</th>
+            <th>Matric No</th>
+            <th>Course</th>
+            <th>Session</th>
+            <th>Timestamp</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in logs %}
+          <tr>
+            <td class="text-muted">{{ loop.index }}</td>
+            <td>{{ row['student_name'] }}</td>
+            <td><code>{{ row['matric_no'] }}</code></td>
+            <td>{{ row['course_code'] or '—' }}</td>
+            <td>{{ row['session'] or '—' }}</td>
+            <td>{{ row['timestamp'] }}</td>
+            <td>
+              <span class="badge bg-{{ 'success' if row['confidence'] < 50 else 'warning text-dark' }}">
+                {{ '%.2f'|format(row['confidence']) }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-4">No records match the selected filters.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

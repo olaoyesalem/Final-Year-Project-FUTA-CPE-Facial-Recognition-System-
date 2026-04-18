@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Courses{% endblock %}
+
+{% block content %}
+<h4 class="mb-3">Course Management</h4>
+
+<div class="row g-3">
+  <!-- Add course form -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">Add Course</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('courses.add') }}">
+          <div class="mb-3">
+            <label class="form-label">Course Code</label>
+            <input type="text" class="form-control" name="course_code" required
+                   placeholder="e.g. CPE 401">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Course Name</label>
+            <input type="text" class="form-control" name="course_name" required
+                   placeholder="e.g. Embedded Systems Design">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Department</label>
+            <input type="text" class="form-control" name="department"
+                   value="Computer Engineering">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Semester</label>
+            <select class="form-select" name="semester">
+              <option value="First">First</option>
+              <option value="Second">Second</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Add Course</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Courses table -->
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">
+        All Courses
+        <span class="badge bg-secondary ms-2">{{ courses|length }}</span>
+      </div>
+      <div class="card-body p-0">
+        {% if courses %}
+        <div class="table-responsive">
+          <table class="table table-hover table-sm mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Semester</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in courses %}
+              <tr class="{{ 'text-muted' if not c['is_active'] }}">
+                <td><code>{{ c['course_code'] }}</code></td>
+                <td>{{ c['course_name'] }}</td>
+                <td>{{ c['semester'] }}</td>
+                <td>
+                  <span class="badge bg-{{ 'success' if c['is_active'] else 'secondary' }}">
+                    {{ 'Active' if c['is_active'] else 'Inactive' }}
+                  </span>
+                </td>
+                <td>
+                  {% if c['is_active'] %}
+                  <form method="POST"
+                        action="{{ url_for('courses.delete', course_id=c['id']) }}"
+                        class="d-inline"
+                        onsubmit="return confirm('Deactivate {{ c['course_code'] }}?')">
+                    <button class="btn btn-sm btn-outline-danger">Deactivate</button>
+                  </form>
+                  {% else %}
+                  <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">No courses added yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
