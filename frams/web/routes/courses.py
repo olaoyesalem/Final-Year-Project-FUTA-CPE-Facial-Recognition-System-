@@ -1,0 +1,44 @@
+"""Course management."""
+from flask import Blueprint, render_template, redirect, url_for, flash, request
+from database.db_manager import DatabaseManager
+
+bp = Blueprint('courses', __name__)
+
+
+@bp.route('/')
+def index():
+    db = DatabaseManager()
+    return render_template('courses.html', courses=db.list_courses(active_only=False))
+
+
+@bp.route('/add', methods=['POST'])
+def add():
+    code = request.form.get('course_code', '').strip()
+    name = request.form.get('course_name', '').strip()
+    dept = request.form.get('department', 'Computer Engineering').strip()
+    sem  = request.form.get('semester', 'First').strip()
+
+    if not code or not name:
+        flash('Course code and name are required.', 'warning')
+        return redirect(url_for('courses.index'))
+
+    db = DatabaseManager()
+    try:
+        db.add_course(code, name, dept, sem)
+        flash(f'Course {code} added.', 'success')
+    except Exception as exc:
+        flash(f'Error: {exc}', 'danger')
+    return redirect(url_for('courses.index'))
+
+
+@bp.route('/<int:course_id>/delete', methods=['POST'])
+def delete(course_id):
+    db = DatabaseManager()
+    course = db.get_course_by_id(course_id)
+    if not course:
+        flash('Course not found.', 'danger')
+        return redirect(url_for('courses.index'))
+    with db._cursor() as cur:
+        cur.execute("UPDATE courses SET is_active = 0 WHERE id = ?", (course_id,))
+    flash(f'Course {course["course_code"]} deactivated.', 'success')
+    return redirect(url_for('courses.index'))
