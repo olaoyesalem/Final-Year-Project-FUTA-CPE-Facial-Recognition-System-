@@ -92,6 +92,53 @@
   </div>
 </div>
 
+<!-- ================================================================
+     WEB UPLOAD (Supabase Path B)
+================================================================ -->
+{% if supabase_enabled %}
+<div class="card shadow-sm mt-3">
+  <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+    <span>Upload Photos (Web Enrollment)</span>
+    <span class="badge bg-success">Supabase Connected</span>
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Select a student, then upload 20–40 clear face photos. The server will
+      automatically crop each face and push it to Supabase Storage. The Pi will
+      download and retrain within <strong>~1 minute</strong>.
+    </p>
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Student</label>
+        <select class="form-select" id="uploadStudentId">
+          <option value="">— select student —</option>
+          {% for s in students %}
+          <option value="{{ s['id'] }}">{{ s['name'] }} ({{ s['matric_no'] }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-5">
+        <label class="form-label">Photos <span class="text-muted small">(JPEG/PNG, multiple OK)</span></label>
+        <input type="file" class="form-control" id="uploadFiles"
+               accept="image/*" multiple>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-primary w-100" onclick="startUpload()">Upload &amp; Enroll</button>
+      </div>
+    </div>
+    <div id="uploadResult" class="mt-3 d-none"></div>
+    <div class="progress mt-2 d-none" id="uploadProgress" style="height:6px">
+      <div class="progress-bar progress-bar-striped progress-bar-animated w-100"></div>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-secondary mt-3 mb-0 small">
+  <strong>Supabase not configured.</strong> Web photo upload is disabled.
+  Set <code>SUPABASE_URL</code> and <code>SUPABASE_KEY</code> environment variables to enable it.
+</div>
+{% endif %}
+
 <!-- Training status toast -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="trainToast" class="toast" role="alert">
@@ -150,6 +197,47 @@ function showToast(msg) {
   document.getElementById('trainToastMsg').textContent = msg;
   const toast = new bootstrap.Toast(document.getElementById('trainToast'), { delay: 5000 });
   toast.show();
+}
+
+// ---------------------------------------------------------------
+// Web upload (Supabase)
+// ---------------------------------------------------------------
+function startUpload() {
+  const studentId = document.getElementById('uploadStudentId')?.value;
+  const files     = document.getElementById('uploadFiles')?.files;
+  const resultDiv = document.getElementById('uploadResult');
+  const bar       = document.getElementById('uploadProgress');
+
+  if (!studentId) { alert('Please select a student.'); return; }
+  if (!files || files.length === 0) { alert('Please select at least one photo.'); return; }
+
+  const fd = new FormData();
+  for (const f of files) fd.append('photos', f);
+
+  resultDiv.innerHTML = '';
+  resultDiv.classList.add('d-none');
+  bar.classList.remove('d-none');
+
+  fetch(`/enrollment/upload/${studentId}`, { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      bar.classList.add('d-none');
+      resultDiv.classList.remove('d-none');
+      if (data.ok) {
+        resultDiv.innerHTML = `<div class="alert alert-success mb-0">
+          <strong>✓ ${data.message}</strong>
+          ${data.skipped ? `<span class="text-muted ms-2 small">(${data.skipped} photo(s) had no face — skipped)</span>` : ''}
+        </div>`;
+        document.getElementById('uploadFiles').value = '';
+      } else {
+        resultDiv.innerHTML = `<div class="alert alert-danger mb-0"><strong>✗ ${data.error}</strong></div>`;
+      }
+    })
+    .catch(() => {
+      bar.classList.add('d-none');
+      resultDiv.classList.remove('d-none');
+      resultDiv.innerHTML = '<div class="alert alert-danger mb-0">Network error. Try again.</div>';
+    });
 }
 </script>
 {% endblock %}

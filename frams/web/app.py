@@ -1,7 +1,7 @@
 """Flask application factory for FRAMS."""
 import config
 from flask import Flask
-from web.routes import dashboard, enrollment, attendance, courses, settings, stream
+from web.routes import dashboard, enrollment, attendance, courses, settings, stream, student
 
 
 def create_app(app_state=None) -> Flask:
@@ -26,5 +26,6 @@ def create_app(app_state=None) -> Flask:
     app.register_blueprint(courses.bp,    url_prefix='/courses')
     app.register_blueprint(settings.bp,   url_prefix='/settings')
     app.register_blueprint(stream.bp,     url_prefix='/stream')
+    app.register_blueprint(student.bp,   url_prefix='/students')
 
     return app

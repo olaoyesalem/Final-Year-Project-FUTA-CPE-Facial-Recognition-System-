@@ -38,3 +38,7 @@ pandas>=2.1.0          # DataFrame used for CSV / Excel report generation
 # --- Utilities ---
 Pillow>=10.0.0         # Image handling for dataset preprocessing
 requests>=2.31.0       # HTTP client for network sync (T22)
+
+# --- Supabase Cloud Integration ---
+supabase>=2.0.0        # Official Python client (PostgreSQL + Storage)
+httpx>=0.24.0          # Required by supabase-py internals

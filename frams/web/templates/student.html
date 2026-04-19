@@ -1,0 +1,604 @@
+{% extends "base.html" %}
+{% block title %}Student Profile{% endblock %}
+
+{% block content %}
+
+<!-- ================================================================
+     PAGE HEADER + MODE TOGGLE
+================================================================ -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Student Attendance Profile</h4>
+  <div class="btn-group" role="group">
+    <button class="btn btn-primary btn-sm active" id="modeProfile"
+            onclick="setMode('profile')">Profile</button>
+    <button class="btn btn-outline-primary btn-sm" id="modeCompare"
+            onclick="setMode('compare')">Compare</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     PROFILE MODE
+================================================================ -->
+<div id="modeProfileSection">
+
+  <!-- Search -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body py-2">
+      <div class="position-relative">
+        <input type="text" class="form-control form-control-lg" id="studentSearch"
+               placeholder="Type student name or matric number…" autocomplete="off">
+        <ul class="list-group position-absolute w-100 shadow d-none"
+            id="studentDropdown"
+            style="z-index:1050;max-height:260px;overflow-y:auto;top:100%;left:0">
+          {% for s in students %}
+          <li class="list-group-item list-group-item-action py-2 student-opt"
+              data-id="{{ s['id'] }}" data-name="{{ s['name'] }}"
+              data-matric="{{ s['matric_no'] }}" style="cursor:pointer">
+            {{ s['name'] }}
+            <span class="text-muted ms-2 small">{{ s['matric_no'] }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="emptyState" class="text-center text-muted py-5">
+    <svg xmlns="http://www.w3.org/2000/svg" width="52" height="52"
+         fill="currentColor" class="bi bi-person-circle mb-3 d-block mx-auto opacity-25"
+         viewBox="0 0 16 16">
+      <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/>
+      <path fill-rule="evenodd"
+            d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226
+               4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"/>
+    </svg>
+    Search for a student above to view their profile.
+  </div>
+
+  <!-- Profile card -->
+  <div id="profileSection" class="d-none">
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-3">
+            <div id="avatar"
+                 style="width:64px;height:64px;border-radius:50%;background:#0d6efd;
+                        color:#fff;font-size:1.4rem;font-weight:700;flex-shrink:0;
+                        display:flex;align-items:center;justify-content:center">--</div>
+            <div>
+              <h5 class="mb-0" id="studentName">—</h5>
+              <p class="text-muted mb-0 small" id="studentMeta">—</p>
+            </div>
+          </div>
+          <!-- Export dropdown -->
+          <div class="dropdown" id="exportDropdown">
+            <button class="btn btn-outline-secondary btn-sm dropdown-toggle"
+                    data-bs-toggle="dropdown">Export Report</button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li>
+                <a class="dropdown-item" href="#" id="exportCsvLink">
+                  Download CSV
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id="exportPrintLink"
+                   target="_blank">
+                  Print / Save PDF
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="row g-3">
+          <!-- Overall % + sparkline -->
+          <div class="col-sm-4">
+            <div class="border rounded-3 p-3 text-center">
+              <div class="text-muted small mb-1">Overall attendance</div>
+              <div class="d-flex align-items-center justify-content-center gap-2">
+                <div class="fw-bold fs-2" id="statPct">—%</div>
+                <div id="trendBadge" style="font-size:1.4rem;line-height:1"></div>
+              </div>
+              <div id="sparklineWrap" class="d-flex justify-content-center mt-1"></div>
+              <div class="progress mt-2" style="height:5px">
+                <div class="progress-bar" id="statPctBar" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+          <!-- Classes attended -->
+          <div class="col-sm-4">
+            <div class="border rounded-3 p-3 text-center">
+              <div class="text-muted small mb-1">Classes attended</div>
+              <div class="fw-bold fs-2 text-success" id="statClasses">—</div>
+            </div>
+          </div>
+          <!-- Streak -->
+          <div class="col-sm-4">
+            <div class="border rounded-3 p-3 text-center">
+              <div class="text-muted small mb-1">Streak</div>
+              <div class="fw-bold fs-2 text-warning" id="statStreak">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3">
+      <li class="nav-item">
+        <button class="nav-link active" data-tab="courses">Courses</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" data-tab="calendar">Calendar</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" data-tab="scanlog">Scan log</button>
+      </li>
+    </ul>
+
+    <div id="tab-courses" class="tab-pane-frams">
+      <div class="card shadow-sm">
+        <div class="card-body" id="coursesBody"></div>
+      </div>
+    </div>
+
+    <div id="tab-calendar" class="tab-pane-frams d-none">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <button class="btn btn-sm btn-outline-secondary" onclick="shiftMonth(-1)">&#8249;</button>
+            <span class="fw-semibold" id="calMonthLabel"></span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="shiftMonth(1)">&#8250;</button>
+          </div>
+          <div id="calGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-scanlog" class="tab-pane-frams d-none">
+      <div class="card shadow-sm">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+              <thead class="table-light">
+                <tr><th>#</th><th>Date &amp; Time</th><th>Course</th><th>Session</th><th>Confidence</th></tr>
+              </thead>
+              <tbody id="scanLogBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /profileSection -->
+</div><!-- /modeProfileSection -->
+
+
+<!-- ================================================================
+     COMPARE MODE
+================================================================ -->
+<div id="modeCompareSection" class="d-none">
+  <div class="row g-3">
+    {% for side in ['A', 'B'] %}
+    <div class="col-md-6">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body py-2">
+          <div class="position-relative">
+            <input type="text" class="form-control cmp-search"
+                   id="cmpSearch{{ side }}" data-side="{{ side }}"
+                   placeholder="Search student {{ side }}…" autocomplete="off">
+            <ul class="list-group position-absolute w-100 shadow d-none cmp-dropdown"
+                id="cmpDrop{{ side }}" data-side="{{ side }}"
+                style="z-index:1050;max-height:200px;overflow-y:auto;top:100%;left:0">
+              {% for s in students %}
+              <li class="list-group-item list-group-item-action py-1 cmp-opt"
+                  data-id="{{ s['id'] }}" data-name="{{ s['name'] }}"
+                  data-matric="{{ s['matric_no'] }}" data-side="{{ side }}"
+                  style="cursor:pointer;font-size:.88rem">
+                {{ s['name'] }}
+                <span class="text-muted ms-1 small">{{ s['matric_no'] }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      </div>
+      <!-- Mini profile -->
+      <div id="cmpProfile{{ side }}" class="d-none">
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <div id="cmpAvatar{{ side }}"
+                   style="width:44px;height:44px;border-radius:50%;
+                          background:{{ '#0d6efd' if side=='A' else '#198754' }};
+                          color:#fff;font-size:1rem;font-weight:700;flex-shrink:0;
+                          display:flex;align-items:center;justify-content:center">--</div>
+              <div>
+                <div class="fw-semibold" id="cmpName{{ side }}">—</div>
+                <div class="text-muted small" id="cmpMeta{{ side }}">—</div>
+              </div>
+            </div>
+            <div class="row g-2 text-center mb-3">
+              <div class="col-4 border rounded-3 py-2">
+                <div class="fw-bold fs-5" id="cmpPct{{ side }}">—</div>
+                <div class="text-muted" style="font-size:.7rem">Overall</div>
+              </div>
+              <div class="col-4 border rounded-3 py-2">
+                <div class="fw-bold fs-5" id="cmpClasses{{ side }}">—</div>
+                <div class="text-muted" style="font-size:.7rem">Classes</div>
+              </div>
+              <div class="col-4 border rounded-3 py-2">
+                <div class="fw-bold fs-5" id="cmpStreak{{ side }}">—</div>
+                <div class="text-muted" style="font-size:.7rem">Streak</div>
+              </div>
+            </div>
+            <div id="cmpCourses{{ side }}"></div>
+          </div>
+        </div>
+      </div>
+      <div id="cmpEmpty{{ side }}" class="text-center text-muted py-3 small">
+        Search for a student above.
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div><!-- /modeCompareSection -->
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.cal-header { font-size:.68rem; text-align:center; color:#6c757d; padding:2px 0; font-weight:600; }
+.cal-day { aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+           border-radius:6px; font-size:.8rem; }
+.cal-day.present  { background:#0d6efd; color:#fff; font-weight:700; }
+.cal-day.today    { outline:2px solid #0d6efd; }
+.cal-day.absent   { color:#adb5bd; }
+.cal-day.empty    {}
+.course-row { margin-bottom:1.1rem; }
+.course-row:last-child { margin-bottom:0; }
+.trend-up   { color:#198754; }
+.trend-down { color:#dc3545; }
+.trend-flat { color:#6c757d; }
+</style>
+
+<script>
+// ================================================================
+// Mode toggle
+// ================================================================
+function setMode(mode) {
+  document.getElementById('modeProfileSection').classList.toggle('d-none', mode !== 'profile');
+  document.getElementById('modeCompareSection').classList.toggle('d-none', mode !== 'compare');
+  document.getElementById('modeProfile').classList.toggle('active', mode === 'profile');
+  document.getElementById('modeProfile').classList.toggle('btn-primary', mode === 'profile');
+  document.getElementById('modeProfile').classList.toggle('btn-outline-primary', mode !== 'profile');
+  document.getElementById('modeCompare').classList.toggle('active', mode === 'compare');
+  document.getElementById('modeCompare').classList.toggle('btn-primary', mode === 'compare');
+  document.getElementById('modeCompare').classList.toggle('btn-outline-primary', mode !== 'compare');
+}
+
+// ================================================================
+// Shared search-dropdown builder
+// ================================================================
+function wireSearch(inputEl, dropdownEl, opts, onSelect) {
+  inputEl.addEventListener('input', function () {
+    const q = this.value.trim().toLowerCase();
+    if (!q) { dropdownEl.classList.add('d-none'); return; }
+    let vis = 0;
+    opts.forEach(li => {
+      const m = li.dataset.name.toLowerCase().includes(q) ||
+                li.dataset.matric.toLowerCase().includes(q);
+      li.style.display = m ? '' : 'none';
+      if (m) vis++;
+    });
+    dropdownEl.classList.toggle('d-none', vis === 0);
+  });
+  opts.forEach(li => {
+    li.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      inputEl.value = this.dataset.name + ' (' + this.dataset.matric + ')';
+      dropdownEl.classList.add('d-none');
+      onSelect(parseInt(this.dataset.id));
+    });
+  });
+  document.addEventListener('click', e => {
+    if (!inputEl.contains(e.target)) dropdownEl.classList.add('d-none');
+  });
+}
+
+// ── Profile mode search ──────────────────────────────────────────
+wireSearch(
+  document.getElementById('studentSearch'),
+  document.getElementById('studentDropdown'),
+  Array.from(document.querySelectorAll('#studentDropdown .student-opt')),
+  loadProfile
+);
+
+// ── Compare mode search (A & B) ──────────────────────────────────
+['A', 'B'].forEach(side => {
+  wireSearch(
+    document.getElementById('cmpSearch' + side),
+    document.getElementById('cmpDrop' + side),
+    Array.from(document.querySelectorAll('#cmpDrop' + side + ' .cmp-opt')),
+    id => loadCompare(side, id)
+  );
+});
+
+// ================================================================
+// Tab switching (profile mode only)
+// ================================================================
+document.querySelectorAll('.nav-tabs .nav-link[data-tab]').forEach(btn => {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.nav-tabs .nav-link').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    document.querySelectorAll('.tab-pane-frams').forEach(p => p.classList.add('d-none'));
+    const tab = this.dataset.tab;
+    document.getElementById('tab-' + tab).classList.remove('d-none');
+    if (tab === 'calendar') renderCalendar();
+  });
+});
+
+// ================================================================
+// Profile loader
+// ================================================================
+let _data    = null;
+let calYear, calMonth;
+
+function loadProfile(studentId) {
+  document.getElementById('emptyState').classList.add('d-none');
+  document.getElementById('profileSection').classList.add('d-none');
+
+  fetch('/students/' + studentId + '/profile')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { alert(data.error); return; }
+      _data = data;
+      calYear = calMonth = undefined;
+      renderProfile(data);
+      document.getElementById('profileSection').classList.remove('d-none');
+      // Wire export links
+      document.getElementById('exportCsvLink').href =
+        '/students/' + studentId + '/export?format=csv';
+      document.getElementById('exportPrintLink').href =
+        '/students/' + studentId + '/export?format=print';
+    })
+    .catch(() => alert('Network error.'));
+}
+
+function renderProfile(data) {
+  const s  = data.student;
+  const st = data.stats;
+
+  document.getElementById('avatar').textContent     = s.initials;
+  document.getElementById('studentName').textContent = s.name;
+  document.getElementById('studentMeta').textContent = s.matric_no + ' · ' + s.department;
+
+  // % stat + colour
+  const pctEl = document.getElementById('statPct');
+  pctEl.textContent = st.pct + '%';
+  pctEl.className   = 'fw-bold fs-2 ' +
+    (st.pct >= 75 ? 'text-success' : st.pct >= 50 ? 'text-warning' : 'text-danger');
+
+  document.getElementById('statPctBar').style.width = st.pct + '%';
+  document.getElementById('statClasses').textContent = st.attended + ' / ' + st.total;
+  document.getElementById('statStreak').textContent  =
+    st.streak + (st.streak === 1 ? ' day' : ' days');
+
+  // Trend arrow
+  const trendMap = {
+    up:   { sym: '↑', cls: 'trend-up',   title: 'Trending up (this week vs last week)' },
+    down: { sym: '↓', cls: 'trend-down', title: 'Trending down (this week vs last week)' },
+    flat: { sym: '→', cls: 'trend-flat', title: 'Stable attendance' },
+  };
+  const t = trendMap[st.trend] || trendMap.flat;
+  const badge = document.getElementById('trendBadge');
+  badge.textContent = t.sym;
+  badge.className   = t.cls;
+  badge.title       = t.title;
+
+  // Sparkline
+  document.getElementById('sparklineWrap').innerHTML = sparklineSVG(st.presence);
+
+  renderCourses(data.courses);
+  renderScanLog(data.scan_log);
+
+  // Reset tabs to Courses
+  document.querySelectorAll('.nav-tabs .nav-link').forEach(b => b.classList.remove('active'));
+  document.querySelector('[data-tab="courses"]').classList.add('active');
+  document.querySelectorAll('.tab-pane-frams').forEach(p => p.classList.add('d-none'));
+  document.getElementById('tab-courses').classList.remove('d-none');
+}
+
+// ================================================================
+// Sparkline SVG
+// ================================================================
+function sparklineSVG(presence, w=110, h=28) {
+  const n    = presence.length;
+  const step = w / (n - 1);
+  const pts  = presence.map((v, i) => {
+    const x = i * step;
+    const y = h - 4 - v * (h - 8);
+    return x + ',' + y;
+  }).join(' ');
+
+  // Area fill path (close below)
+  const last    = (n - 1) * step;
+  const areaEnd = `${last},${h} 0,${h}`;
+  const areaPts = pts + ' ' + areaEnd;
+
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <polygon points="${areaPts}" fill="#0d6efd" opacity="0.12"/>
+    <polyline points="${pts}" fill="none" stroke="#0d6efd"
+              stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+// ================================================================
+// Course bars
+// ================================================================
+function renderCourses(courses) {
+  const body = document.getElementById('coursesBody');
+  if (!courses.length) {
+    body.innerHTML = '<p class="text-muted mb-0">No course attendance records yet.</p>';
+    return;
+  }
+  body.innerHTML = courses.map(c => {
+    const color = c.pct >= 75 ? 'success' : c.pct >= 50 ? 'warning' : 'danger';
+    return `<div class="course-row">
+      <div class="d-flex justify-content-between align-items-baseline mb-1">
+        <span>
+          <span class="fw-semibold">${c.code}</span>
+          <span class="text-muted ms-2 small">${c.name}</span>
+        </span>
+        <span class="fw-bold text-${color}">${c.pct}%</span>
+      </div>
+      <div class="progress" style="height:8px">
+        <div class="progress-bar bg-${color}" style="width:${c.pct}%"
+             title="${c.attended}/${c.total} classes"></div>
+      </div>
+      <div class="text-muted" style="font-size:.72rem;margin-top:2px">
+        ${c.attended} / ${c.total} class${c.total !== 1 ? 'es' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ================================================================
+// Scan log
+// ================================================================
+function renderScanLog(log) {
+  const tbody = document.getElementById('scanLogBody');
+  if (!log.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No records yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = log.map((r, i) => {
+    const bc = r.confidence < 50 ? 'success' : 'warning text-dark';
+    return `<tr>
+      <td class="text-muted">${i+1}</td>
+      <td>${r.timestamp}</td>
+      <td>${r.course}</td>
+      <td>${r.session}</td>
+      <td><span class="badge bg-${bc}">${r.confidence}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ================================================================
+// Calendar
+// ================================================================
+const CAL_DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function shiftMonth(delta) {
+  calMonth += delta;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0)  { calMonth = 11; calYear--; }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  if (!_data) return;
+  const presentSet = new Set(_data.dates);
+  const today = new Date();
+  if (calYear === undefined) { calYear = today.getFullYear(); calMonth = today.getMonth(); }
+
+  document.getElementById('calMonthLabel').textContent =
+    new Date(calYear, calMonth, 1).toLocaleString('default', { month:'long', year:'numeric' });
+
+  const firstDay  = new Date(calYear, calMonth, 1).getDay();
+  const daysInMo  = new Date(calYear, calMonth + 1, 0).getDate();
+  const todayStr  = today.toISOString().slice(0, 10);
+
+  let html = '<div class="cal-grid">';
+  CAL_DAYS.forEach(d => { html += `<div class="cal-header">${d}</div>`; });
+  for (let i = 0; i < firstDay; i++) html += '<div class="cal-day empty"></div>';
+  for (let d = 1; d <= daysInMo; d++) {
+    const ds  = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    let cls   = 'cal-day ' + (presentSet.has(ds) ? 'present' : 'absent');
+    if (ds === todayStr) cls += ' today';
+    html += `<div class="${cls}" title="${ds}">${d}</div>`;
+  }
+  html += '</div>';
+  html += `<div class="d-flex gap-3 mt-3" style="font-size:.77rem">
+    <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;
+                       background:#0d6efd;vertical-align:middle"></span> Present</span>
+    <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;
+                       background:#dee2e6;vertical-align:middle"></span> Absent</span>
+  </div>`;
+
+  document.getElementById('calGrid').innerHTML = html;
+}
+
+// ================================================================
+// Compare mode loader
+// ================================================================
+const _cmpData = { A: null, B: null };
+
+function loadCompare(side, studentId) {
+  document.getElementById('cmpProfile' + side).classList.add('d-none');
+  document.getElementById('cmpEmpty'   + side).textContent = 'Loading…';
+
+  fetch('/students/' + studentId + '/profile')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { alert(data.error); return; }
+      _cmpData[side] = data;
+      renderCompare(side, data);
+    })
+    .catch(() => alert('Network error.'));
+}
+
+function renderCompare(side, data) {
+  const s  = data.student;
+  const st = data.stats;
+  const color = side === 'A' ? '#0d6efd' : '#198754';
+
+  document.getElementById('cmpAvatar'  + side).textContent = s.initials;
+  document.getElementById('cmpAvatar'  + side).style.background = color;
+  document.getElementById('cmpName'    + side).textContent = s.name;
+  document.getElementById('cmpMeta'    + side).textContent = s.matric_no + ' · ' + s.department;
+  document.getElementById('cmpPct'     + side).textContent = st.pct + '%';
+  document.getElementById('cmpClasses' + side).textContent = st.attended + '/' + st.total;
+  document.getElementById('cmpStreak'  + side).textContent = st.streak + 'd';
+
+  // Mini course bars
+  const hex = side === 'A' ? '#0d6efd' : '#198754';
+  const div = document.getElementById('cmpCourses' + side);
+  if (!data.courses.length) {
+    div.innerHTML = '<p class="text-muted small mb-0">No course records.</p>';
+  } else {
+    div.innerHTML = data.courses.map(c => `
+      <div class="mb-2">
+        <div class="d-flex justify-content-between" style="font-size:.8rem">
+          <span class="fw-semibold">${c.code}</span>
+          <span>${c.pct}%</span>
+        </div>
+        <div class="progress" style="height:6px">
+          <div class="progress-bar" style="width:${c.pct}%;background:${hex}"></div>
+        </div>
+      </div>`).join('');
+  }
+
+  document.getElementById('cmpEmpty'   + side).textContent = '';
+  document.getElementById('cmpProfile' + side).classList.remove('d-none');
+
+  // Highlight winner after both are loaded
+  if (_cmpData.A && _cmpData.B) highlightWinner();
+}
+
+function highlightWinner() {
+  const pA = _cmpData.A.stats.pct;
+  const pB = _cmpData.B.stats.pct;
+  const elA = document.getElementById('cmpPct' + 'A');
+  const elB = document.getElementById('cmpPct' + 'B');
+  elA.className = 'fw-bold fs-5';
+  elB.className = 'fw-bold fs-5';
+  if (pA > pB)      { elA.classList.add('text-success'); elB.classList.add('text-danger'); }
+  else if (pB > pA) { elB.classList.add('text-success'); elA.classList.add('text-danger'); }
+}
+</script>
+{% endblock %}

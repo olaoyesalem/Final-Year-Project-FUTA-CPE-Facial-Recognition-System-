@@ -181,6 +181,60 @@ class DatabaseManager:
             cur.execute("SELECT * FROM courses WHERE id = ?", (course_id,))
             return cur.fetchone()
 
+    def get_course_student_stats(self, course_id: int) -> List[sqlite3.Row]:
+        """
+        For every active student: how many distinct days they attended this course
+        vs total distinct days the course ran (any student attended).
+        Ordered highest attendance first.
+        """
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                WITH course_days AS (
+                    SELECT COUNT(DISTINCT DATE(timestamp)) AS total_days
+                    FROM attendance_logs
+                    WHERE course_id = ?
+                ),
+                student_days AS (
+                    SELECT student_id,
+                           COUNT(DISTINCT DATE(timestamp)) AS attended_days
+                    FROM attendance_logs
+                    WHERE course_id = ?
+                    GROUP BY student_id
+                )
+                SELECT
+                    s.id,
+                    s.name           AS student_name,
+                    s.matric_no,
+                    COALESCE(sd.attended_days, 0)                      AS attended,
+                    (SELECT total_days FROM course_days)                AS total,
+                    ROUND(100.0 * COALESCE(sd.attended_days, 0)
+                          / MAX((SELECT total_days FROM course_days), 1)) AS pct
+                FROM students s
+                LEFT JOIN student_days sd ON sd.student_id = s.id
+                WHERE s.is_active = 1
+                ORDER BY pct DESC, s.name
+                """,
+                (course_id, course_id),
+            )
+            return cur.fetchall()
+
+    def get_course_daily_totals(self, course_id: int) -> List[sqlite3.Row]:
+        """Distinct attendance count per day for this course — used for the sparkline."""
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                SELECT DATE(timestamp) AS day, COUNT(DISTINCT student_id) AS count
+                FROM attendance_logs
+                WHERE course_id = ?
+                GROUP BY day
+                ORDER BY day DESC
+                LIMIT 30
+                """,
+                (course_id,),
+            )
+            return cur.fetchall()
+
     # ------------------------------------------------------------------
     # Session helpers
     # ------------------------------------------------------------------
@@ -222,10 +276,16 @@ class DatabaseManager:
 
     def log_attendance(self, student_id: int, confidence: float,
                        course_id: Optional[int] = None,
-                       session_id: Optional[int] = None) -> Optional[int]:
+                       session_id: Optional[int] = None,
+                       timestamp: Optional[str] = None) -> Optional[int]:
         """
         Write one attendance record.  Checks for duplicates first.
         Returns the new log id, or None if it was a duplicate.
+
+        Parameters
+        ----------
+        timestamp : str, optional
+            'YYYY-MM-DD HH:MM:SS' string.  Defaults to current local time.
         """
         if self.is_duplicate(student_id):
             logger.warning(
@@ -234,17 +294,27 @@ class DatabaseManager:
             return None
 
         with self._cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO attendance_logs (student_id, course_id, session_id, confidence)
-                VALUES (?, ?, ?, ?)
-                """,
-                (student_id, course_id, session_id, round(confidence, 4)),
-            )
+            if timestamp:
+                cur.execute(
+                    """
+                    INSERT INTO attendance_logs
+                        (student_id, course_id, session_id, confidence, timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (student_id, course_id, session_id, round(confidence, 4), timestamp),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO attendance_logs (student_id, course_id, session_id, confidence)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (student_id, course_id, session_id, round(confidence, 4)),
+                )
             log_id = cur.lastrowid
             logger.info(
-                "Attendance logged: student_id=%d, log_id=%d, confidence=%.2f",
-                student_id, log_id, confidence,
+                "Attendance logged: student_id=%d, log_id=%d, confidence=%.2f, ts=%s",
+                student_id, log_id, confidence, timestamp or "now",
             )
             return log_id
 
@@ -356,6 +426,164 @@ class DatabaseManager:
                 ORDER BY total_present DESC
                 """,
                 params,
+            )
+            return cur.fetchall()
+
+    # ------------------------------------------------------------------
+    # Student Profile (attendance analytics)
+    # ------------------------------------------------------------------
+
+    def get_student_attendance_stats(self, student_id: int) -> dict:
+        """
+        Returns overall attendance stats for one student.
+        Denominator = unique (course_id, date) pairs across ALL students
+        (proxy for "total scheduled classes").
+        """
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(DISTINCT course_id || '_' || DATE(timestamp))
+                FROM attendance_logs
+                WHERE course_id IS NOT NULL
+                """
+            )
+            total = cur.fetchone()[0] or 0
+
+            cur.execute(
+                """
+                SELECT COUNT(DISTINCT course_id || '_' || DATE(timestamp))
+                FROM attendance_logs
+                WHERE student_id = ? AND course_id IS NOT NULL
+                """,
+                (student_id,),
+            )
+            attended = cur.fetchone()[0] or 0
+
+        pct = round(attended / total * 100) if total else 0
+        return {"total": total, "attended": attended, "pct": pct}
+
+    def get_student_streak(self, student_id: int) -> int:
+        """Consecutive-day streak (counts back from today or yesterday)."""
+        from datetime import date, timedelta
+
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT DATE(timestamp) AS day
+                FROM attendance_logs
+                WHERE student_id = ?
+                ORDER BY day DESC
+                """,
+                (student_id,),
+            )
+            days = [row[0] for row in cur.fetchall()]
+
+        if not days:
+            return 0
+
+        today = date.today()
+        anchor = today if days[0] == today.isoformat() else today - timedelta(days=1)
+        if days[0] != anchor.isoformat():
+            return 0
+
+        streak = 0
+        check  = anchor
+        for d in days:
+            if d == check.isoformat():
+                streak += 1
+                check -= timedelta(days=1)
+            else:
+                break
+        return streak
+
+    def get_student_course_stats(self, student_id: int) -> List[sqlite3.Row]:
+        """
+        Per-course attendance: student's attended days vs total class days.
+        Only includes courses that have at least one attendance record globally.
+        """
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                WITH course_totals AS (
+                    SELECT course_id,
+                           COUNT(DISTINCT DATE(timestamp)) AS total_days
+                    FROM attendance_logs
+                    WHERE course_id IS NOT NULL
+                    GROUP BY course_id
+                ),
+                student_days AS (
+                    SELECT course_id,
+                           COUNT(DISTINCT DATE(timestamp)) AS attended_days
+                    FROM attendance_logs
+                    WHERE student_id = ? AND course_id IS NOT NULL
+                    GROUP BY course_id
+                )
+                SELECT
+                    c.id,
+                    c.course_code,
+                    c.course_name,
+                    COALESCE(sd.attended_days, 0)          AS attended,
+                    ct.total_days                           AS total,
+                    ROUND(100.0 * COALESCE(sd.attended_days, 0)
+                          / ct.total_days)                 AS pct
+                FROM course_totals ct
+                JOIN courses c ON c.id = ct.course_id
+                LEFT JOIN student_days sd ON sd.course_id = ct.course_id
+                ORDER BY c.course_code
+                """,
+                (student_id,),
+            )
+            return cur.fetchall()
+
+    def get_student_attendance_dates(self, student_id: int) -> List[str]:
+        """All distinct dates (YYYY-MM-DD) the student has an attendance record."""
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT DATE(timestamp) AS day
+                FROM attendance_logs
+                WHERE student_id = ?
+                ORDER BY day DESC
+                """,
+                (student_id,),
+            )
+            return [row[0] for row in cur.fetchall()]
+
+    def get_student_daily_presence(self, student_id: int, days: int = 14) -> List[int]:
+        """
+        Returns a list of length `days` (oldest → newest) where
+        1 = student had at least one attendance record that day, 0 = absent.
+        Used to render the sparkline and compute the weekly trend.
+        """
+        from datetime import date, timedelta
+        present = set(self.get_student_attendance_dates(student_id))
+        today   = date.today()
+        return [
+            1 if (today - timedelta(days=i)).isoformat() in present else 0
+            for i in range(days - 1, -1, -1)
+        ]
+
+    def get_student_scan_log(self, student_id: int,
+                             limit: int = 60) -> List[sqlite3.Row]:
+        """Recent attendance records for the scan-log tab."""
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    al.id,
+                    c.course_code,
+                    c.course_name,
+                    se.name       AS session,
+                    al.timestamp,
+                    al.confidence
+                FROM attendance_logs al
+                LEFT JOIN courses  c  ON c.id  = al.course_id
+                LEFT JOIN sessions se ON se.id = al.session_id
+                WHERE al.student_id = ?
+                ORDER BY al.timestamp DESC
+                LIMIT ?
+                """,
+                (student_id, limit),
             )
             return cur.fetchall()
 

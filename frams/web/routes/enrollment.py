@@ -1,13 +1,16 @@
-"""Student enrollment, dataset capture, and model training."""
+"""Student enrollment, dataset capture, model training, and web-upload."""
+import io
 import logging
 import os
 import threading
 
+import cv2
 from flask import (Blueprint, jsonify, redirect, render_template,
                    request, url_for, flash, current_app)
 
 import config
 from database.db_manager import DatabaseManager
+from database import supabase_client as supa
 from recognition.face_detector import FaceDetector
 from recognition.dataset_capture import DatasetCapture
 from recognition.trainer import Trainer, TrainerError
@@ -128,7 +131,8 @@ def index():
     students = db.list_students()
     counts   = {s['id']: _count_images(s['face_label']) for s in students}
     return render_template('enrollment.html', students=students, counts=counts,
-                           target=config.DATASET_IMAGES_PER_STUDENT)
+                           target=config.DATASET_IMAGES_PER_STUDENT,
+                           supabase_enabled=config.SUPABASE_ENABLED)
 
 
 @bp.route('/add', methods=['POST'])
@@ -253,6 +257,81 @@ def train():
     ).start()
 
     return jsonify(ok=True)
+
+
+@bp.route('/upload/<int:student_id>', methods=['POST'])
+def upload(student_id):
+    """
+    Web enrollment upload (Path B).
+    Accepts multiple JPEG/PNG files, crops the face from each via Haar Cascade,
+    pushes the cropped grayscale image to Supabase Storage, and inserts a
+    face_images row so the Pi downloader will fetch and retrain.
+    """
+    if not config.SUPABASE_ENABLED:
+        return jsonify(ok=False, error='Supabase is not configured on this server.'), 503
+
+    db      = DatabaseManager()
+    student = db.get_student_by_id(student_id)
+    if not student:
+        return jsonify(ok=False, error='Student not found.'), 404
+
+    files = request.files.getlist('photos')
+    if not files:
+        return jsonify(ok=False, error='No files uploaded.'), 400
+
+    detector   = FaceDetector()
+    face_label = student['face_label']
+    saved      = 0
+    skipped    = 0
+
+    for f in files:
+        if not f.filename:
+            continue
+        try:
+            data = f.read()
+            arr  = cv2.imdecode(
+                __import__('numpy').frombuffer(data, __import__('numpy').uint8),
+                cv2.IMREAD_COLOR,
+            )
+            if arr is None:
+                skipped += 1
+                continue
+
+            rect = detector.detect_largest(arr)
+            if rect is None:
+                skipped += 1
+                continue
+
+            roi = detector.crop_face(arr, rect)   # returns (100,100) gray ROI
+            ok, buf = cv2.imencode('.jpg', roi)
+            if not ok:
+                skipped += 1
+                continue
+
+            # Push to Supabase Storage: face-images/{face_label}/{student_id}_{saved}.jpg
+            storage_path = f"{face_label}/{student_id}_{saved + 1:04d}.jpg"
+            if not supa.upload_image_bytes(storage_path, buf.tobytes()):
+                skipped += 1
+                continue
+
+            row = supa.insert_face_image(student_id, face_label, storage_path)
+            if row:
+                saved += 1
+            else:
+                skipped += 1
+
+        except Exception as exc:
+            logger.warning("upload: error processing file %s: %s", f.filename, exc)
+            skipped += 1
+
+    if saved == 0:
+        return jsonify(
+            ok=False,
+            error=f'No faces detected in the uploaded images ({skipped} skipped).',
+        ), 400
+
+    return jsonify(ok=True, saved=saved, skipped=skipped,
+                   message=f'{saved} image(s) uploaded. Pi will retrain on next sync.')
 
 
 @bp.route('/train/status')

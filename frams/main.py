@@ -31,6 +31,7 @@ from recognition.face_detector import FaceDetector
 from recognition.liveness import LivenessDetector
 from recognition.recognizer import Recognizer, RecognizerError
 from sync.sync_manager import SyncManager
+from sync.downloader import Downloader
 from web.app import create_app
 from web.state import AppState
 
@@ -160,7 +161,9 @@ def _run_attendance_scan(
         return
 
     # Refresh frame after liveness window
-    frame = app_state.frame_buffer.get_raw() or frame
+    latest = app_state.frame_buffer.get_raw()
+    if latest is not None:
+        frame = latest
     rect  = detector.detect_largest(frame)
     if rect is None:
         lcd.show(*config.LCD_MSG_NO_FACE)
@@ -281,6 +284,10 @@ def main() -> None:
     sync = SyncManager(db)
     sync.start()
 
+    # --- Supabase downloader (Pi ← cloud face images) ---
+    downloader = Downloader(app_state)
+    downloader.start()
+
     # --- Attendance loop ---
     app_state.set_mode("attendance")
     logger.info("Entering attendance loop. Waiting for button press…")
@@ -304,12 +311,14 @@ def main() -> None:
                 _run_attendance_scan(
                     app_state, db, detector, recognizer, liveness, lcd, gpio
                 )
+                time.sleep(1)  # debounce — prevents tight loop in GPIO no-op mode
 
     except KeyboardInterrupt:
         logger.info("Shutdown requested via Ctrl+C.")
     finally:
         stop_feed.set()
         sync.stop()
+        downloader.stop()
         camera.stop()
         gpio.stop()
         lcd.stop()

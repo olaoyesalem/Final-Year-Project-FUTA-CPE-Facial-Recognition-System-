@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Attendance Report — {{ student.name }}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px;
+           color: #111; margin: 0; padding: 20px 30px; }
+    h1  { font-size: 18px; margin: 0 0 2px; }
+    h2  { font-size: 13px; margin: 18px 0 6px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start;
+              border-bottom: 2px solid #0d6efd; padding-bottom: 12px; margin-bottom: 16px; }
+    .brand  { font-size: 22px; font-weight: 800; color: #0d6efd; letter-spacing: -0.5px; }
+    .meta   { color: #555; font-size: 11px; }
+    .stats  { display: flex; gap: 24px; margin: 12px 0 18px; }
+    .stat   { text-align: center; border: 1px solid #ddd; border-radius: 8px;
+              padding: 10px 18px; min-width: 110px; }
+    .stat-val { font-size: 22px; font-weight: 700; color: #0d6efd; }
+    .stat-lbl { font-size: 10px; color: #777; margin-top: 2px; }
+    table   { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th      { background: #f0f0f0; border: 1px solid #ddd; padding: 5px 8px;
+              text-align: left; font-weight: 600; }
+    td      { border: 1px solid #ddd; padding: 4px 8px; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .bar-wrap { width: 100px; background: #eee; border-radius: 4px; height: 8px;
+                display: inline-block; vertical-align: middle; }
+    .bar-fill { height: 8px; border-radius: 4px; background: #0d6efd; }
+    .pct-label { margin-left: 6px; font-weight: 600; }
+    .footer { margin-top: 24px; font-size: 10px; color: #aaa; text-align: center;
+              border-top: 1px solid #eee; padding-top: 8px; }
+    @media print {
+      body { padding: 10px 20px; }
+      .no-print { display: none !important; }
+      @page { margin: 15mm; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Print button (hidden on print) -->
+<div class="no-print" style="margin-bottom:16px">
+  <button onclick="window.print()"
+          style="padding:8px 20px;background:#0d6efd;color:#fff;border:none;
+                 border-radius:6px;cursor:pointer;font-size:13px">
+    Print / Save as PDF
+  </button>
+  <button onclick="window.close()"
+          style="margin-left:10px;padding:8px 16px;background:#f0f0f0;
+                 border:none;border-radius:6px;cursor:pointer;font-size:13px">
+    Close
+  </button>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <div class="brand">FRAMS</div>
+    <div class="meta">Facial Recognition Attendance Management System</div>
+  </div>
+  <div style="text-align:right">
+    <strong>Attendance Report</strong><br>
+    <span class="meta">Generated: {{ generated }}</span>
+  </div>
+</div>
+
+<!-- Student info -->
+<h2>Student Information</h2>
+<table style="width:auto;margin-bottom:0">
+  <tr><th>Full Name</th>    <td>{{ student.name }}</td></tr>
+  <tr><th>Matric No</th>    <td>{{ student.matric_no }}</td></tr>
+  <tr><th>Department</th>   <td>{{ student.department }}</td></tr>
+</table>
+
+<!-- Summary stats -->
+<h2>Attendance Summary</h2>
+<div class="stats">
+  <div class="stat">
+    <div class="stat-val">{{ stats.pct }}%</div>
+    <div class="stat-lbl">Overall Attendance</div>
+  </div>
+  <div class="stat">
+    <div class="stat-val">{{ stats.attended }} / {{ stats.total }}</div>
+    <div class="stat-lbl">Classes Attended</div>
+  </div>
+  <div class="stat">
+    <div class="stat-val">{{ stats.streak }}</div>
+    <div class="stat-lbl">Day Streak</div>
+  </div>
+</div>
+
+<!-- Per-course -->
+<h2>Per-Course Breakdown</h2>
+<table>
+  <thead>
+    <tr><th>Course Code</th><th>Course Name</th><th>Attended</th><th>Total</th><th>Attendance</th></tr>
+  </thead>
+  <tbody>
+    {% for c in courses %}
+    <tr>
+      <td>{{ c.code }}</td>
+      <td>{{ c.name }}</td>
+      <td>{{ c.attended }}</td>
+      <td>{{ c.total }}</td>
+      <td>
+        <div class="bar-wrap">
+          <div class="bar-fill" style="width:{{ c.pct }}%;
+               background:{{ '#198754' if c.pct >= 75 else '#ffc107' if c.pct >= 50 else '#dc3545' }}">
+          </div>
+        </div>
+        <span class="pct-label">{{ c.pct }}%</span>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="color:#aaa;text-align:center">No course records.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Full log -->
+<h2>Full Attendance Log</h2>
+<table>
+  <thead>
+    <tr><th>#</th><th>Date &amp; Time</th><th>Course</th><th>Session</th><th>Confidence</th></tr>
+  </thead>
+  <tbody>
+    {% for r in scan_log %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ r.timestamp }}</td>
+      <td>{{ r.course }}</td>
+      <td>{{ r.session }}</td>
+      <td>{{ r.confidence }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="color:#aaa;text-align:center">No records.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="footer">
+  FRAMS &mdash; Facial Recognition Attendance Management System &mdash; Confidential
+</div>
+</body>
+</html>

@@ -3,18 +3,123 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="mb-0">Attendance Log</h4>
+  <h4 class="mb-0">Attendance</h4>
   <a href="{{ url_for('attendance.export',
                date_from=date_from, date_to=date_to,
                course_id=course_id or '', session_id=session_id or '') }}"
-     class="btn btn-success btn-sm">
-    Export Excel
-  </a>
+     class="btn btn-success btn-sm">Export Excel</a>
 </div>
 
-<!-- Filter form -->
-<div class="card shadow-sm mb-3">
-  <div class="card-body py-2">
+<!-- ================================================================
+     MARK ATTENDANCE
+================================================================ -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+    <span>Mark Attendance</span>
+    <button class="btn btn-sm btn-outline-secondary" type="button"
+            data-bs-toggle="collapse" data-bs-target="#markPanel">Toggle</button>
+  </div>
+
+  <div class="collapse show" id="markPanel">
+    <div class="card-body">
+      <div class="row g-3 align-items-start mb-3">
+
+        <!-- Searchable student picker -->
+        <div class="col-md-4">
+          <label class="form-label">Student <span class="text-danger">*</span></label>
+          <div class="position-relative">
+            <input type="text" class="form-control" id="studentSearch"
+                   placeholder="Type name or matric no…" autocomplete="off">
+            <input type="hidden" id="markStudentId">
+            <!-- Filtered dropdown -->
+            <ul class="list-group position-absolute w-100 shadow d-none"
+                id="studentDropdown"
+                style="z-index:1050; max-height:220px; overflow-y:auto; top:100%; left:0">
+              {% for s in students %}
+              <li class="list-group-item list-group-item-action py-2 student-opt"
+                  data-id="{{ s['id'] }}"
+                  data-name="{{ s['name'] }}"
+                  data-matric="{{ s['matric_no'] }}"
+                  style="cursor:pointer">
+                {{ s['name'] }}
+                <span class="text-muted ms-2 small">{{ s['matric_no'] }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div class="form-text text-primary fw-semibold" id="markMatricDisplay"></div>
+        </div>
+
+        <!-- Course (required) -->
+        <div class="col-md-3">
+          <label class="form-label">Course <span class="text-danger">*</span></label>
+          <select class="form-select" id="markCourse">
+            <option value="">— select course —</option>
+            {% for c in courses %}
+            <option value="{{ c['id'] }}">{{ c['course_code'] }} — {{ c['course_name'] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Session / Time (required) -->
+        <div class="col-md-2">
+          <label class="form-label">Session <span class="text-danger">*</span></label>
+          <select class="form-select" id="markSession">
+            <option value="">— select —</option>
+            {% for s in sessions %}
+            <option value="{{ s['id'] }}">{{ s['name'] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Date &amp; Time <span class="text-danger">*</span></label>
+          <input type="datetime-local" class="form-control" id="markDateTime">
+        </div>
+
+        <div class="col-md-12 d-flex justify-content-end">
+          <button class="btn btn-primary px-4" onclick="startVerification()">
+            Verify Face &amp; Mark
+          </button>
+        </div>
+      </div>
+
+      <!-- Live camera (shown after clicking Verify) -->
+      <div id="verifyPanel" class="d-none">
+        <hr class="my-2">
+        <div class="row justify-content-center">
+          <div class="col-md-6 text-center">
+            <p class="fw-semibold text-primary mb-2" id="verifyStudentLabel"></p>
+            <div class="preview-container mb-2">
+              <img src="{{ url_for('stream.video_feed') }}"
+                   class="img-fluid rounded preview-img" alt="Live camera">
+            </div>
+            <p class="text-muted small mb-2">
+              Student should face the camera directly, then click <strong>Capture &amp; Verify</strong>.
+            </p>
+            <div class="d-flex gap-2 justify-content-center">
+              <button class="btn btn-success" id="captureBtn" onclick="captureAndVerify()">
+                Capture &amp; Verify
+              </button>
+              <button class="btn btn-outline-secondary" onclick="cancelVerification()">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result -->
+      <div id="markResult" class="mt-3 d-none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     ATTENDANCE LOG
+================================================================ -->
+<div class="card shadow-sm">
+  <div class="card-header fw-semibold">Attendance Log</div>
+
+  <div class="card-body border-bottom py-2">
     <form method="GET" class="row g-2 align-items-end">
       <div class="col-sm-3">
         <label class="form-label small mb-1">From</label>
@@ -31,8 +136,7 @@
         <select class="form-select form-select-sm" name="course_id">
           <option value="">All Courses</option>
           {% for c in courses %}
-          <option value="{{ c['id'] }}"
-                  {% if course_id == c['id'] %}selected{% endif %}>
+          <option value="{{ c['id'] }}" {% if course_id == c['id'] %}selected{% endif %}>
             {{ c['course_code'] }} — {{ c['course_name'] }}
           </option>
           {% endfor %}
@@ -43,8 +147,7 @@
         <select class="form-select form-select-sm" name="session_id">
           <option value="">All Sessions</option>
           {% for s in sessions %}
-          <option value="{{ s['id'] }}"
-                  {% if session_id == s['id'] %}selected{% endif %}>
+          <option value="{{ s['id'] }}" {% if session_id == s['id'] %}selected{% endif %}>
             {{ s['name'] }}
           </option>
           {% endfor %}
@@ -55,15 +158,9 @@
       </div>
     </form>
   </div>
-</div>
 
-<!-- Results -->
-<div class="card shadow-sm">
-  <div class="card-header">
-    <span class="fw-semibold">Results</span>
-    <span class="badge bg-secondary ms-2">{{ logs|length }} record(s)</span>
-  </div>
   <div class="card-body p-0">
+    <div class="px-3 py-2 border-bottom text-muted small">{{ logs|length }} record(s)</div>
     {% if logs %}
     <div class="table-responsive">
       <table class="table table-hover table-sm mb-0">
@@ -74,7 +171,7 @@
             <th>Matric No</th>
             <th>Course</th>
             <th>Session</th>
-            <th>Timestamp</th>
+            <th>Date &amp; Time</th>
             <th>Confidence</th>
           </tr>
         </thead>
@@ -102,4 +199,133 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ---------------------------------------------------------------
+// Default datetime-local to now
+// ---------------------------------------------------------------
+(function () {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  document.getElementById('markDateTime').value = now.toISOString().slice(0, 16);
+})();
+
+// ---------------------------------------------------------------
+// Searchable student picker
+// ---------------------------------------------------------------
+const searchInput  = document.getElementById('studentSearch');
+const studentIdFld = document.getElementById('markStudentId');
+const dropdown     = document.getElementById('studentDropdown');
+const matricLabel  = document.getElementById('markMatricDisplay');
+const opts         = Array.from(dropdown.querySelectorAll('.student-opt'));
+
+searchInput.addEventListener('input', function () {
+  const q = this.value.trim().toLowerCase();
+  studentIdFld.value = '';
+  matricLabel.textContent = '';
+
+  if (!q) { dropdown.classList.add('d-none'); return; }
+
+  let visible = 0;
+  opts.forEach(li => {
+    const match = li.dataset.name.toLowerCase().includes(q) ||
+                  li.dataset.matric.toLowerCase().includes(q);
+    li.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  dropdown.classList.toggle('d-none', visible === 0);
+});
+
+opts.forEach(li => {
+  li.addEventListener('mousedown', function (e) {
+    e.preventDefault(); // keep input focused
+    studentIdFld.value      = this.dataset.id;
+    searchInput.value       = this.dataset.name + ' (' + this.dataset.matric + ')';
+    matricLabel.textContent = 'Matric: ' + this.dataset.matric;
+    dropdown.classList.add('d-none');
+  });
+});
+
+// Close dropdown when clicking elsewhere
+document.addEventListener('click', function (e) {
+  if (!searchInput.contains(e.target)) dropdown.classList.add('d-none');
+});
+
+// ---------------------------------------------------------------
+// Mark Attendance controls
+// ---------------------------------------------------------------
+function startVerification() {
+  const studentId = studentIdFld.value;
+  const courseId  = document.getElementById('markCourse').value;
+  const sessionId = document.getElementById('markSession').value;
+  const dateTime  = document.getElementById('markDateTime').value;
+
+  if (!studentId) {
+    alert('Please search and select a student.'); return;
+  }
+  if (!courseId) {
+    alert('Course is required.'); return;
+  }
+  if (!sessionId) {
+    alert('Session is required.'); return;
+  }
+  if (!dateTime) {
+    alert('Date and time are required.'); return;
+  }
+
+  document.getElementById('verifyStudentLabel').textContent =
+    'Verifying: ' + searchInput.value;
+  document.getElementById('verifyPanel').classList.remove('d-none');
+  document.getElementById('markResult').classList.add('d-none');
+}
+
+function cancelVerification() {
+  document.getElementById('verifyPanel').classList.add('d-none');
+}
+
+function captureAndVerify() {
+  const studentId = parseInt(studentIdFld.value);
+  const courseId  = parseInt(document.getElementById('markCourse').value)  || null;
+  const sessionId = parseInt(document.getElementById('markSession').value) || null;
+  const timestamp = document.getElementById('markDateTime').value;
+  const resultDiv = document.getElementById('markResult');
+  const btn       = document.getElementById('captureBtn');
+
+  btn.disabled = true;
+  btn.textContent = 'Verifying…';
+  resultDiv.innerHTML = '<div class="alert alert-info mb-0">Capturing and verifying face…</div>';
+  resultDiv.classList.remove('d-none');
+
+  fetch('{{ url_for("attendance.mark") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ student_id: studentId, course_id: courseId, session_id: sessionId, timestamp }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.disabled = false;
+    btn.textContent = 'Capture & Verify';
+
+    if (data.ok) {
+      resultDiv.innerHTML = `
+        <div class="alert alert-success mb-0">
+          <strong>✓ ${data.message}</strong>
+          <span class="text-muted ms-2 small">Confidence score: ${data.confidence}</span>
+        </div>`;
+      document.getElementById('verifyPanel').classList.add('d-none');
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      resultDiv.innerHTML = `
+        <div class="alert alert-danger mb-0"><strong>✗ ${data.error}</strong></div>`;
+    }
+  })
+  .catch(() => {
+    btn.disabled = false;
+    btn.textContent = 'Capture & Verify';
+    resultDiv.innerHTML = '<div class="alert alert-danger mb-0">Network error. Try again.</div>';
+  });
+}
+</script>
 {% endblock %}

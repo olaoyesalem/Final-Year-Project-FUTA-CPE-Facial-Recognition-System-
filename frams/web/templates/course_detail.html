@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}{{ course['course_code'] }}{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('courses.index') }}">Courses</a></li>
+    <li class="breadcrumb-item active">{{ course['course_code'] }}</li>
+  </ol>
+</nav>
+
+<!-- Header row -->
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+  <div>
+    <h4 class="mb-0">{{ course['course_code'] }}
+      <span class="text-muted fw-normal fs-6 ms-2">{{ course['course_name'] }}</span>
+    </h4>
+    <div class="text-muted small mt-1">
+      {{ course['department'] }} &middot; {{ course['semester'] }} Semester
+    </div>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <!-- Threshold picker -->
+    <form class="d-flex align-items-center gap-2" method="GET">
+      <label class="form-label mb-0 small text-muted">At-risk below</label>
+      <select class="form-select form-select-sm" name="threshold" onchange="this.form.submit()"
+              style="width:80px">
+        {% for t in [50, 60, 70, 75, 80] %}
+        <option value="{{ t }}" {% if threshold == t %}selected{% endif %}>{{ t }}%</option>
+        {% endfor %}
+      </select>
+    </form>
+    <a href="{{ url_for('courses.export', course_id=course['id'], threshold=threshold) }}"
+       class="btn btn-outline-success btn-sm">Export CSV</a>
+  </div>
+</div>
+
+<!-- Summary cards -->
+{% set total_students = rows|length %}
+{% set at_risk = below|length %}
+{% set avg_pct = (rows | map(attribute='pct') | map('int') | sum / total_students) | round | int if total_students else 0 %}
+{% set total_days = rows[0]['total'] if rows else 0 %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-sm-3">
+    <div class="card shadow-sm text-center py-3">
+      <div class="fs-2 fw-bold text-primary">{{ total_students }}</div>
+      <div class="text-muted small">Students</div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-3">
+    <div class="card shadow-sm text-center py-3">
+      <div class="fs-2 fw-bold text-info">{{ total_days }}</div>
+      <div class="text-muted small">Classes Held</div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-3">
+    <div class="card shadow-sm text-center py-3">
+      <div class="fs-2 fw-bold
+           {{ 'text-success' if avg_pct >= threshold else 'text-danger' }}">{{ avg_pct }}%</div>
+      <div class="text-muted small">Class Average</div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-3">
+    <div class="card shadow-sm text-center py-3">
+      <div class="fs-2 fw-bold text-danger">{{ at_risk }}</div>
+      <div class="text-muted small">At Risk (&lt;{{ threshold }}%)</div>
+    </div>
+  </div>
+</div>
+
+<!-- At-risk alert -->
+{% if below %}
+<div class="alert alert-danger d-flex align-items-center gap-2 mb-4">
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor"
+       class="bi bi-exclamation-triangle-fill flex-shrink-0" viewBox="0 0 16 16">
+    <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091
+             1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767zM8 5c.535 0
+             .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905
+             0 0 1 8 5m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"/>
+  </svg>
+  <div>
+    <strong>{{ at_risk }} student{{ 's' if at_risk != 1 }} below {{ threshold }}% threshold:</strong>
+    {{ below | map(attribute='student_name') | join(', ') }}
+  </div>
+</div>
+{% endif %}
+
+<!-- Student rankings table -->
+<div class="card shadow-sm">
+  <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+    <span>Student Rankings</span>
+    <span class="badge bg-secondary">{{ total_students }} students</span>
+  </div>
+  <div class="card-body p-0">
+    {% if rows %}
+    <div class="table-responsive">
+      <table class="table table-hover table-sm mb-0" id="rankTable">
+        <thead class="table-light">
+          <tr>
+            <th style="width:50px">Rank</th>
+            <th>Student</th>
+            <th>Matric No</th>
+            <th style="width:180px">Attendance</th>
+            <th style="width:80px">%</th>
+            <th style="width:80px">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          {% set pct = r['pct'] | int %}
+          {% set color = 'success' if pct >= threshold else ('warning' if pct >= threshold - 15 else 'danger') %}
+          <tr class="{{ 'table-danger bg-opacity-10' if pct < threshold else '' }}">
+            <td class="text-center fw-bold text-muted">
+              {% if loop.index == 1 %}🥇
+              {% elif loop.index == 2 %}🥈
+              {% elif loop.index == 3 %}🥉
+              {% else %}{{ loop.index }}{% endif %}
+            </td>
+            <td>
+              <a href="{{ url_for('student.index') }}?highlight={{ r['id'] }}"
+                 class="text-decoration-none fw-semibold">{{ r['student_name'] }}</a>
+            </td>
+            <td><code>{{ r['matric_no'] }}</code></td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="progress flex-grow-1" style="height:8px">
+                  <div class="progress-bar bg-{{ color }}"
+                       style="width:{{ pct }}%"></div>
+                </div>
+                <span class="text-muted small" style="white-space:nowrap">
+                  {{ r['attended'] }}/{{ r['total'] }}
+                </span>
+              </div>
+            </td>
+            <td>
+              <span class="fw-bold text-{{ color }}">{{ pct }}%</span>
+            </td>
+            <td>
+              {% if pct < threshold %}
+              <span class="badge bg-danger">At Risk</span>
+              {% else %}
+              <span class="badge bg-success">OK</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-4">No attendance records for this course yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Live search / filter within the table
+const tableRows = document.querySelectorAll('#rankTable tbody tr');
+
+function filterTable(q) {
+  q = q.toLowerCase();
+  tableRows.forEach(tr => {
+    const text = tr.textContent.toLowerCase();
+    tr.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

@@ -62,7 +62,12 @@
             <tbody>
               {% for c in courses %}
               <tr class="{{ 'text-muted' if not c['is_active'] }}">
-                <td><code>{{ c['course_code'] }}</code></td>
+                <td>
+                  <a href="{{ url_for('courses.detail', course_id=c['id']) }}"
+                     class="fw-semibold text-decoration-none">
+                    <code>{{ c['course_code'] }}</code>
+                  </a>
+                </td>
                 <td>{{ c['course_name'] }}</td>
                 <td>{{ c['semester'] }}</td>
                 <td>

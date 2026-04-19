@@ -141,3 +141,14 @@ SYNC_REMOTE_URL         = ""       # Set to departmental server endpoint
 SYNC_INTERVAL_SECONDS   = 300      # Check every 5 minutes
 SYNC_TIMEOUT_SECONDS    = 10
 SYNC_RETRY_ATTEMPTS     = 3
+
+# ---------------------------------------------------------------------------
+# Supabase Cloud Integration
+# ---------------------------------------------------------------------------
+SUPABASE_URL    = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY    = os.environ.get("SUPABASE_KEY", "")   # anon/service key
+SUPABASE_BUCKET = "face-images"                         # Storage bucket name
+SUPABASE_ENABLED = bool(SUPABASE_URL and SUPABASE_KEY)
+
+# Pi downloader: how often to check Supabase for new face images (seconds)
+DOWNLOADER_POLL_SECONDS = 60
